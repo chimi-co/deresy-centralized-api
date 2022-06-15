@@ -1,0 +1,39 @@
+{
+  "name": "deresy-api",
+  "description": "Cloud Functions for Firebase",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "serve": "firebase emulators:start --only functions -P development",
+    "shell": "firebase functions:shell",
+    "start": "yarn shell",
+    "deploy:functions:dev": "yarn lint && ./env.sh dev && firebase deploy --only functions -P development",
+    "deploy:functions:staging": "yarn lint  && ./env.sh staging && firebase deploy --only functions -P staging",
+    "deploy:functions:prod": "yarn lint && ./env.sh prod && firebase deploy --only functions -P production",
+    "deploy:rules:dev": "firebase deploy --only firestore:rules -P development",
+    "deploy:rules:staging": "firebase deploy --only firestore:rules -P staging",
+    "deploy:rules:prod": "firebase deploy --only firestore:rules -P production",
+    "logs": "firebase functions:log",
+    "test:canvas-service": "node test/services/CanvasService.test.js"
+  },
+  "engines": {
+    "node": "12"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "firebase-admin": "^9.8.0",
+    "firebase-functions": "^3.14.1",
+    "optionator": "^0.9.1",
+    "web3": "^1.6.0"
+  },
+  "devDependencies": {
+    "eslint": "^7.6.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-plugin-prettier": "^3.4.0",
+    "firebase-functions-test": "^0.2.0",
+    "prettier": "^2.3.0"
+  },
+  "private": true
+}
