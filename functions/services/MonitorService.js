@@ -1,85 +1,73 @@
 const functions = require('firebase-functions')
 
 const { db } = require('../firebase')
-const {
-  saveForm,
-  saveRequest /* closeRequest, saveReview */,
-} = require('../DeresyDBService')
+const { saveForm, saveRequest, saveReviews } = require('./DeresyDBService')
 const web3 = require('../web3')
 const { MINTED_BLOCK_COLLECTION } = require('../constants/collections')
 const {
-  contractABI,
-  contractAddress,
+  DERESY_CONTRACT_ABI,
+  DERESY_CONTRACT_ADDRESS,
 } = require('../constants/contractConstants')
 
 const mintedBlockRef = db.collection(MINTED_BLOCK_COLLECTION)
 
 const writeFormToDB = async (formID, tx, reviewForm) => {
+  const choicesObj = reviewForm[2].map(choices => {
+    return { choices: choices }
+  })
   const data = {
     formID: parseInt(formID),
     questions: reviewForm[0],
     types: reviewForm[1],
-    choices: reviewForm[2],
+    choices: choicesObj,
     tx: tx,
   }
-
   await saveForm(formID, data)
 }
 
-const writeRequestToDB = async (
-  requestName,
-  reviewers,
-  targets,
-  targetsIPFSHashes,
-  formIpfsHash,
-  rewardPerReview,
-) => {
+const writeRequestToDB = async (requestName, reviewRequest, tx) => {
   const data = {
     requestName: requestName,
-    reviewers: reviewers,
-    targets: targets,
-    targetsIPFSHashes: targetsIPFSHashes,
-    formIpfsHash: formIpfsHash,
-    rewardPerReview: rewardPerReview,
+    reviewers: reviewRequest.reviewers,
+    targets: reviewRequest.targets,
+    targetsIPFSHashes: reviewRequest.targetsIPFSHashes,
+    formIpfsHash: reviewRequest.formIpfsHash,
+    rewardPerReview: reviewRequest.rewardPerReview,
+    isClosed: reviewRequest.isClosed,
+    tx: tx,
   }
 
   await saveRequest(requestName, data)
 }
-/*
-const writeReviewToDB = async (
-  requestName,
-  reviewers,
-  targets,
-  targetsIPFSHashes,
-  formIpfsHash,
-  rewardPerReview,
-) => {
+
+const writeReviewsToDB = async (requestName, reviews) => {
+  const reviewsArray = []
+
+  reviews.forEach(review => {
+    const reviewObj = {
+      reviewer: review.reviewer,
+      targetIndex: review.targetIndex,
+      answers: review.answers,
+    }
+
+    reviewsArray.push(reviewObj)
+  })
+
   const data = {
     requestName: requestName,
-    reviewers: reviewers,
-    targets: targets,
-    targetsIPFSHashes: targetsIPFSHashes,
-    formIpfsHash: formIpfsHash,
-    rewardPerReview: rewardPerReview,
+    reviews: reviewsArray,
   }
 
-  await saveReview(data)
+  await saveReviews(requestName, data)
 }
 
-const closeRequestDB = async (
-  requestName,
-) => {
-  const data = {
-    isClosed: true,
-  }
-
-  await closeRequest(requestName, data)
-}
-*/
-const processFormCreated = async startMintBlock => {
-  const smartContract = new web3.eth.Contract(contractABI, contractAddress)
+const processForms = async startMintBlock => {
+  const smartContract = new web3.eth.Contract(
+    DERESY_CONTRACT_ABI,
+    DERESY_CONTRACT_ADDRESS,
+  )
   const snapshot = await mintedBlockRef
-    .where('monitorType', '==', 'createdForm')
+    .where('monitorType', '==', 'forms')
     .limit(1)
     .get()
 
@@ -88,6 +76,7 @@ const processFormCreated = async startMintBlock => {
   const pastEvents = await smartContract.getPastEvents(
     'CreatedReviewForm',
     {},
+    //toBlock: + maxNumber var
     { fromBlock: startMintBlock, toBlock: 'latest' },
   )
 
@@ -115,17 +104,68 @@ const processFormCreated = async startMintBlock => {
   }
 }
 
-const processRequestCreated = async startMintBlock => {
-  const smartContract = new web3.eth.Contract(contractABI, contractAddress)
+const processRequests = async startMintBlock => {
+  const smartContract = new web3.eth.Contract(
+    DERESY_CONTRACT_ABI,
+    DERESY_CONTRACT_ADDRESS,
+  )
   const snapshot = await mintedBlockRef
-    .where('monitorType', '==', 'createdRequest')
+    .where('monitorType', '==', 'requests')
+    .limit(1)
+    .get()
+
+  const lastBlockDoc = snapshot.docs[0]
+
+  const pastCreatedEvents = await smartContract.getPastEvents(
+    'CreatedReviewRequest',
+    {},
+    { fromBlock: startMintBlock, toBlock: 'latest' },
+  )
+  const pastClosedEvents = await smartContract.getPastEvents(
+    'ClosedReviewRequest',
+    {},
+    { fromBlock: startMintBlock, toBlock: 'latest' },
+  )
+  const pastEvents = pastCreatedEvents.concat(pastClosedEvents).sort((a, b) => {
+    return a.blockNumber - b.blockNumber
+  })
+
+  for (let i = 0; i < pastEvents.length; i++) {
+    const requestName = pastEvents[i].returnValues._requestName
+    const lastMintBlock = pastEvents[i].blockNumber
+    const tx = pastEvents[i].transactionHash
+    const reviewRequest = await smartContract.methods
+      .getRequest(requestName)
+      .call()
+
+    await writeRequestToDB(requestName, reviewRequest, tx)
+
+    await mintedBlockRef
+      .doc(lastBlockDoc.id)
+      .update({ lastRequestName: requestName })
+    await mintedBlockRef
+      .doc(lastBlockDoc.id)
+      .update({ lastSuccessTime: new Date() })
+    await mintedBlockRef
+      .doc(lastBlockDoc.id)
+      .update({ blockNumber: lastMintBlock })
+  }
+}
+
+const processReviews = async startMintBlock => {
+  const smartContract = new web3.eth.Contract(
+    DERESY_CONTRACT_ABI,
+    DERESY_CONTRACT_ADDRESS,
+  )
+  const snapshot = await mintedBlockRef
+    .where('monitorType', '==', 'reviews')
     .limit(1)
     .get()
 
   const lastBlockDoc = snapshot.docs[0]
 
   const pastEvents = await smartContract.getPastEvents(
-    'CreatedReviewRequest',
+    'SubmittedReview',
     {},
     { fromBlock: startMintBlock, toBlock: 'latest' },
   )
@@ -133,29 +173,26 @@ const processRequestCreated = async startMintBlock => {
   for (let i = 0; i < pastEvents.length; i++) {
     const requestName = pastEvents[i].returnValues._requestName
     const lastMintBlock = pastEvents[i].blockNumber
-    const requestID = 0
-    if (requestID > lastBlockDoc.data().lastRequestID) {
-      const tx = pastEvents[i].transactionHash
-      const reviewForm = await smartContract.methods
-        .getRequest(requestName)
-        .call()
+    const tx = pastEvents[i].transactionHash
+    const reviewRequest = await smartContract.methods
+      .getRequest(requestName)
+      .call()
 
-      await writeRequestToDB(requestID, tx, reviewForm)
+    await writeReviewsToDB(requestName, reviewRequest.reviews, tx)
 
-      await mintedBlockRef
-        .doc(lastBlockDoc.id)
-        .update({ lastFormID: parseInt(requestID) })
-      await mintedBlockRef
-        .doc(lastBlockDoc.id)
-        .update({ lastSuccessTime: new Date() })
-    }
+    await mintedBlockRef
+      .doc(lastBlockDoc.id)
+      .update({ lastRequestName: requestName })
+    await mintedBlockRef
+      .doc(lastBlockDoc.id)
+      .update({ lastSuccessTime: new Date() })
     await mintedBlockRef
       .doc(lastBlockDoc.id)
       .update({ blockNumber: lastMintBlock })
   }
 }
 
-const monitorFormCreated = functions
+const monitorForms = functions
   .runWith({
     timeoutSeconds: 540,
     memory: '8GB',
@@ -165,7 +202,7 @@ const monitorFormCreated = functions
     try {
       let lastMintBlock
       const snapshot = await mintedBlockRef
-        .where('monitorType', '==', 'createdForm')
+        .where('monitorType', '==', 'forms')
         .limit(1)
         .get()
 
@@ -179,12 +216,12 @@ const monitorFormCreated = functions
 
       let startMintBlock = lastMintBlock + 1
       if (
-        !doc.data().mintsInProgress || // check if a mint is already in progress
+        !doc.data().formsInProgress || // check if a mint is already in progress
         new Date() - doc.data().lastSuccessTime.toDate() > 540000 // go ahead and run if it's been 9 minutes since last successful run
       ) {
-        await mintedBlockRef.doc(doc.id).update({ mintsInProgress: true })
-        await processFormCreated(startMintBlock)
-        await mintedBlockRef.doc(doc.id).update({ mintsInProgress: false })
+        await mintedBlockRef.doc(doc.id).update({ formsInProgress: true })
+        await processForms(startMintBlock)
+        await mintedBlockRef.doc(doc.id).update({ formsInProgress: false })
         await mintedBlockRef.doc(doc.id).update({ lastSuccessTime: new Date() })
       }
     } catch (error) {
@@ -193,7 +230,7 @@ const monitorFormCreated = functions
     }
   })
 
-const monitorRequestCreated = functions
+const monitorRequests = functions
   .runWith({
     timeoutSeconds: 540,
     memory: '8GB',
@@ -203,7 +240,7 @@ const monitorRequestCreated = functions
     try {
       let lastUpdateBlock
       const snapshot = await mintedBlockRef
-        .where('monitorType', '==', 'createdRequest')
+        .where('monitorType', '==', 'requests')
         .limit(1)
         .get()
       const doc = snapshot.docs[0]
@@ -215,12 +252,48 @@ const monitorRequestCreated = functions
 
       let startUpdateBlock = lastUpdateBlock + 1
       if (
-        !doc.data().updatesInProgress || // check if an update is already in progress
+        !doc.data().requestsInProgress || // check if an update is already in progress
         new Date() - doc.data().lastSuccessTime.toDate() > 540000 // go ahead and run if it's been 9 minutes since last successful run
       ) {
-        await mintedBlockRef.doc(doc.id).update({ updatesInProgress: true })
-        await processRequestCreated(startUpdateBlock)
-        await mintedBlockRef.doc(doc.id).update({ updatesInProgress: false })
+        await mintedBlockRef.doc(doc.id).update({ requestsInProgress: true })
+        await processRequests(startUpdateBlock)
+        await mintedBlockRef.doc(doc.id).update({ requestsInProgress: false })
+        await mintedBlockRef.doc(doc.id).update({ lastSuccessTime: new Date() })
+      }
+    } catch (error) {
+      functions.logger.error('[ !!! ] Error: ', error)
+      throw new functions.https.HttpsError(error.code, error.message)
+    }
+  })
+
+const monitorReviews = functions
+  .runWith({
+    timeoutSeconds: 540,
+    memory: '8GB',
+  })
+  .pubsub.schedule('every 1 minutes')
+  .onRun(async () => {
+    try {
+      let lastUpdateBlock
+      const snapshot = await mintedBlockRef
+        .where('monitorType', '==', 'reviews')
+        .limit(1)
+        .get()
+      const doc = snapshot.docs[0]
+      if (!doc.exists) {
+        lastUpdateBlock = 0
+      } else {
+        lastUpdateBlock = doc.data().blockNumber
+      }
+
+      let startUpdateBlock = lastUpdateBlock + 1
+      if (
+        !doc.data().requestsInProgress || // check if an update is already in progress
+        new Date() - doc.data().lastSuccessTime.toDate() > 540000 // go ahead and run if it's been 9 minutes since last successful run
+      ) {
+        await mintedBlockRef.doc(doc.id).update({ reviewsInProgress: true })
+        await processReviews(startUpdateBlock)
+        await mintedBlockRef.doc(doc.id).update({ reviewsInProgress: false })
         await mintedBlockRef.doc(doc.id).update({ lastSuccessTime: new Date() })
       }
     } catch (error) {
@@ -230,6 +303,7 @@ const monitorRequestCreated = functions
   })
 
 module.exports = {
-  monitorFormCreated,
-  monitorRequestCreated,
+  monitorForms,
+  monitorRequests,
+  monitorReviews,
 }

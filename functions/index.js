@@ -1,9 +1,11 @@
 const { api } = require('./services/ApiService')
 const {
-  monitorFormCreated,
-  monitorRequestCreated,
+  monitorForms,
+  monitorRequests,
+  monitorReviews,
 } = require('./services/MonitorService')
 
 exports.api = api
-exports.monitorFormCreated = monitorFormCreated
-exports.monitorRequestCreated = monitorRequestCreated
+exports.monitorForms = monitorForms
+exports.monitorRequests = monitorRequests
+exports.monitorReviews = monitorReviews
