@@ -3,4 +3,5 @@ module.exports = {
   FORMS_COLLECTION: 'reviewForms',
   REQUESTS_COLLECTION: 'reviewRequests',
   REVIEWS_COLLECTION: 'reviews',
+  GRANTS_COLLECTION: 'grants',
 }

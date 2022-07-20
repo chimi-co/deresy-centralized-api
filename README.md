@@ -42,3 +42,14 @@ yarn deploy:rules:dev
 yarn deploy:rules:staging
 yarn deploy:rules:prod
 ```
+## Grants
+### Add Grants firestore
+* Create an env var called GOOGLE_APPLICATION_CREDENTIALS and point it to your Firebase Service Account private key
+```
+GOOGLE_APPLICATION_CREDENTIALS="path_to_your_private_key"
+```
+* Add the desired grants ids to the grants.txt file located in the scripts folder
+* Run 
+```
+yarn grants:add 
+```
