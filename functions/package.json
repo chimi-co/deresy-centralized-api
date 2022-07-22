@@ -14,7 +14,7 @@
     "deploy:rules:staging": "firebase deploy --only firestore:rules -P staging",
     "deploy:rules:prod": "firebase deploy --only firestore:rules -P production",
     "logs": "firebase functions:log",
-    "test:canvas-service": "node test/services/CanvasService.test.js"
+    "grants:add": "node -e \"require('./scripts/GrantsPopulator').addGrants()\""
   },
   "engines": {
     "node": "12"
