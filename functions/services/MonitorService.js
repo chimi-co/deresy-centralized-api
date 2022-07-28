@@ -34,6 +34,7 @@ const writeRequestToDB = async (requestName, reviewRequest, tx) => {
     targets: reviewRequest.targets,
     targetsIPFSHashes: reviewRequest.targetsIPFSHashes,
     formIpfsHash: reviewRequest.formIpfsHash,
+    reviewFormIndex: reviewRequest.reviewFormIndex,
     rewardPerReview: reviewRequest.rewardPerReview,
     isClosed: reviewRequest.isClosed,
     tx: tx,
