@@ -96,7 +96,11 @@ const processForms = async startFormBlock => {
       pastFormEvents.forEach(ev => pastEvents.push(ev))
     }
 
-    await mintedBlockRef.doc(lastBlockDoc.id).update({ blockNumber: endBlock })
+    const updatedBlockNumber =
+      endBlock == 'latest' ? latestBlockNumber : endBlock
+    await mintedBlockRef
+      .doc(lastBlockDoc.id)
+      .update({ blockNumber: updatedBlockNumber })
 
     pastEvents.sort((a, b) => {
       return a.blockNumber - b.blockNumber
@@ -161,7 +165,11 @@ const processRequests = async startRequestBlock => {
       pastClosedEvents.forEach(ev => pastEvents.push(ev))
     }
 
-    await mintedBlockRef.doc(lastBlockDoc.id).update({ blockNumber: endBlock })
+    const updatedBlockNumber =
+      endBlock == 'latest' ? latestBlockNumber : endBlock
+    await mintedBlockRef
+      .doc(lastBlockDoc.id)
+      .update({ blockNumber: updatedBlockNumber })
 
     pastEvents.sort((a, b) => {
       return a.blockNumber - b.blockNumber
@@ -219,7 +227,11 @@ const processReviews = async startReviewBlock => {
       pastReviewEvents.forEach(ev => pastEvents.push(ev))
     }
 
-    await mintedBlockRef.doc(lastBlockDoc.id).update({ blockNumber: endBlock })
+    const updatedBlockNumber =
+      endBlock == 'latest' ? latestBlockNumber : endBlock
+    await mintedBlockRef
+      .doc(lastBlockDoc.id)
+      .update({ blockNumber: updatedBlockNumber })
 
     pastEvents.sort((a, b) => {
       return a.blockNumber - b.blockNumber
