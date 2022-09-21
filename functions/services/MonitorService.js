@@ -65,180 +65,194 @@ const writeReviewsToDB = async (requestName, reviews) => {
 }
 
 const processForms = async startFormBlock => {
-  const smartContract = new web3.eth.Contract(
-    DERESY_CONTRACT_ABI,
-    DERESY_CONTRACT_ADDRESS,
-  )
-  const snapshot = await mintedBlockRef
-    .where('monitorType', '==', 'forms')
-    .limit(1)
-    .get()
-
-  const lastBlockDoc = snapshot.docs[0]
   const latestBlockNumber = await web3.eth.getBlockNumber()
-  const blockIterations = parseInt(
-    (latestBlockNumber - startFormBlock) / BLOCK_LIMIT,
-  )
-  const pastEvents = []
-
-  for (let i = 0; i <= blockIterations; i++) {
-    const startBlock = startFormBlock + BLOCK_LIMIT * i
-    let endBlock = startBlock + BLOCK_LIMIT
-    if (endBlock >= latestBlockNumber) {
-      endBlock = 'latest'
-    }
-    const pastFormEvents = await smartContract.getPastEvents(
-      'CreatedReviewForm',
-      {},
-      { fromBlock: startBlock, toBlock: endBlock },
+  if (latestBlockNumber > startFormBlock) {
+    const smartContract = new web3.eth.Contract(
+      DERESY_CONTRACT_ABI,
+      DERESY_CONTRACT_ADDRESS,
     )
-    pastFormEvents.forEach(ev => pastEvents.push(ev))
-  }
+    const snapshot = await mintedBlockRef
+      .where('monitorType', '==', 'forms')
+      .limit(1)
+      .get()
 
-  pastEvents.sort((a, b) => {
-    return a.blockNumber - b.blockNumber
-  })
-
-  for (let i = 0; i < pastEvents.length; i++) {
-    const formID = pastEvents[i].returnValues._formId
-    const lastFormBlock = pastEvents[i].blockNumber
-    if (formID > lastBlockDoc.data().lastFormID) {
-      const tx = pastEvents[i].transactionHash
-      const reviewForm = await smartContract.methods
-        .getReviewForm(formID)
-        .call()
-
-      await writeFormToDB(formID, tx, reviewForm)
-
-      await mintedBlockRef
-        .doc(lastBlockDoc.id)
-        .update({ lastFormID: parseInt(formID) })
-      await mintedBlockRef
-        .doc(lastBlockDoc.id)
-        .update({ lastSuccessTime: new Date() })
+    const lastBlockDoc = snapshot.docs[0]
+    const blockIterations = parseInt(
+      (latestBlockNumber - startFormBlock) / BLOCK_LIMIT,
+    )
+    const pastEvents = []
+    let endBlock
+    for (let i = 0; i <= blockIterations; i++) {
+      const startBlock = startFormBlock + BLOCK_LIMIT * i
+      endBlock = startBlock + BLOCK_LIMIT
+      if (endBlock >= latestBlockNumber) {
+        endBlock = 'latest'
+      }
+      const pastFormEvents = await smartContract.getPastEvents(
+        'CreatedReviewForm',
+        {},
+        { fromBlock: startBlock, toBlock: endBlock },
+      )
+      pastFormEvents.forEach(ev => pastEvents.push(ev))
     }
+
+    const updatedBlockNumber =
+      endBlock == 'latest' ? latestBlockNumber : endBlock
     await mintedBlockRef
       .doc(lastBlockDoc.id)
-      .update({ blockNumber: lastFormBlock })
+      .update({ blockNumber: updatedBlockNumber })
+
+    pastEvents.sort((a, b) => {
+      return a.blockNumber - b.blockNumber
+    })
+
+    for (let i = 0; i < pastEvents.length; i++) {
+      const formID = pastEvents[i].returnValues._formId
+      if (formID > lastBlockDoc.data().lastFormID) {
+        const tx = pastEvents[i].transactionHash
+        const reviewForm = await smartContract.methods
+          .getReviewForm(formID)
+          .call()
+
+        await writeFormToDB(formID, tx, reviewForm)
+
+        await mintedBlockRef
+          .doc(lastBlockDoc.id)
+          .update({ lastFormID: parseInt(formID) })
+        await mintedBlockRef
+          .doc(lastBlockDoc.id)
+          .update({ lastSuccessTime: new Date() })
+      }
+    }
   }
 }
 
 const processRequests = async startRequestBlock => {
-  const smartContract = new web3.eth.Contract(
-    DERESY_CONTRACT_ABI,
-    DERESY_CONTRACT_ADDRESS,
-  )
-  const snapshot = await mintedBlockRef
-    .where('monitorType', '==', 'requests')
-    .limit(1)
-    .get()
-
-  const lastBlockDoc = snapshot.docs[0]
   const latestBlockNumber = await web3.eth.getBlockNumber()
-  const blockIterations = parseInt(
-    (latestBlockNumber - startRequestBlock) / BLOCK_LIMIT,
-  )
-  const pastEvents = []
+  if (latestBlockNumber > startRequestBlock) {
+    const smartContract = new web3.eth.Contract(
+      DERESY_CONTRACT_ABI,
+      DERESY_CONTRACT_ADDRESS,
+    )
+    const snapshot = await mintedBlockRef
+      .where('monitorType', '==', 'requests')
+      .limit(1)
+      .get()
 
-  for (let i = 0; i <= blockIterations; i++) {
-    const startBlock = startRequestBlock + BLOCK_LIMIT * i
-    let endBlock = startBlock + BLOCK_LIMIT
-    if (endBlock >= latestBlockNumber) {
-      endBlock = 'latest'
+    const lastBlockDoc = snapshot.docs[0]
+    const blockIterations = parseInt(
+      (latestBlockNumber - startRequestBlock) / BLOCK_LIMIT,
+    )
+    const pastEvents = []
+    let endBlock
+    for (let i = 0; i <= blockIterations; i++) {
+      const startBlock = startRequestBlock + BLOCK_LIMIT * i
+      endBlock = startBlock + BLOCK_LIMIT
+      if (endBlock >= latestBlockNumber) {
+        endBlock = 'latest'
+      }
+      const pastCreatedEvents = await smartContract.getPastEvents(
+        'CreatedReviewRequest',
+        {},
+        { fromBlock: startBlock, toBlock: endBlock },
+      )
+      const pastClosedEvents = await smartContract.getPastEvents(
+        'ClosedReviewRequest',
+        {},
+        { fromBlock: startBlock, toBlock: endBlock },
+      )
+      pastCreatedEvents.forEach(ev => pastEvents.push(ev))
+      pastClosedEvents.forEach(ev => pastEvents.push(ev))
     }
-    const pastCreatedEvents = await smartContract.getPastEvents(
-      'CreatedReviewRequest',
-      {},
-      { fromBlock: startBlock, toBlock: endBlock },
-    )
-    const pastClosedEvents = await smartContract.getPastEvents(
-      'ClosedReviewRequest',
-      {},
-      { fromBlock: startBlock, toBlock: endBlock },
-    )
-    pastCreatedEvents.forEach(ev => pastEvents.push(ev))
-    pastClosedEvents.forEach(ev => pastEvents.push(ev))
-  }
 
-  pastEvents.sort((a, b) => {
-    return a.blockNumber - b.blockNumber
-  })
-
-  for (let i = 0; i < pastEvents.length; i++) {
-    const requestName = pastEvents[i].returnValues._requestName
-    const lastRequestBlock = pastEvents[i].blockNumber
-    const tx = pastEvents[i].transactionHash
-    const reviewRequest = await smartContract.methods
-      .getRequest(requestName)
-      .call()
-
-    await writeRequestToDB(requestName, reviewRequest, tx)
-
+    const updatedBlockNumber =
+      endBlock == 'latest' ? latestBlockNumber : endBlock
     await mintedBlockRef
       .doc(lastBlockDoc.id)
-      .update({ lastRequestName: requestName })
-    await mintedBlockRef
-      .doc(lastBlockDoc.id)
-      .update({ lastSuccessTime: new Date() })
-    await mintedBlockRef
-      .doc(lastBlockDoc.id)
-      .update({ blockNumber: lastRequestBlock })
+      .update({ blockNumber: updatedBlockNumber })
+
+    pastEvents.sort((a, b) => {
+      return a.blockNumber - b.blockNumber
+    })
+
+    for (let i = 0; i < pastEvents.length; i++) {
+      const requestName = pastEvents[i].returnValues._requestName
+      const tx = pastEvents[i].transactionHash
+      const reviewRequest = await smartContract.methods
+        .getRequest(requestName)
+        .call()
+
+      await writeRequestToDB(requestName, reviewRequest, tx)
+
+      await mintedBlockRef
+        .doc(lastBlockDoc.id)
+        .update({ lastRequestName: requestName })
+      await mintedBlockRef
+        .doc(lastBlockDoc.id)
+        .update({ lastSuccessTime: new Date() })
+    }
   }
 }
 
 const processReviews = async startReviewBlock => {
-  const smartContract = new web3.eth.Contract(
-    DERESY_CONTRACT_ABI,
-    DERESY_CONTRACT_ADDRESS,
-  )
-  const snapshot = await mintedBlockRef
-    .where('monitorType', '==', 'reviews')
-    .limit(1)
-    .get()
-
-  const lastBlockDoc = snapshot.docs[0]
   const latestBlockNumber = await web3.eth.getBlockNumber()
-  const blockIterations = parseInt(
-    (latestBlockNumber - startReviewBlock) / BLOCK_LIMIT,
-  )
-  const pastEvents = []
-
-  for (let i = 0; i <= blockIterations; i++) {
-    const startBlock = startReviewBlock + BLOCK_LIMIT * i
-    let endBlock = startBlock + BLOCK_LIMIT
-    if (endBlock >= latestBlockNumber) {
-      endBlock = 'latest'
-    }
-    const pastReviewEvents = await smartContract.getPastEvents(
-      'SubmittedReview',
-      {},
-      { fromBlock: startBlock, toBlock: endBlock },
+  if (latestBlockNumber > startReviewBlock) {
+    const smartContract = new web3.eth.Contract(
+      DERESY_CONTRACT_ABI,
+      DERESY_CONTRACT_ADDRESS,
     )
-    pastReviewEvents.forEach(ev => pastEvents.push(ev))
-  }
-  pastEvents.sort((a, b) => {
-    return a.blockNumber - b.blockNumber
-  })
+    const snapshot = await mintedBlockRef
+      .where('monitorType', '==', 'reviews')
+      .limit(1)
+      .get()
 
-  for (let i = 0; i < pastEvents.length; i++) {
-    const requestName = pastEvents[i].returnValues._requestName
-    const lastReviewBlock = pastEvents[i].blockNumber
-    const tx = pastEvents[i].transactionHash
-    const reviewRequest = await smartContract.methods
-      .getRequest(requestName)
-      .call()
+    const lastBlockDoc = snapshot.docs[0]
+    const latestBlockNumber = await web3.eth.getBlockNumber()
+    const blockIterations = parseInt(
+      (latestBlockNumber - startReviewBlock) / BLOCK_LIMIT,
+    )
+    const pastEvents = []
+    let endBlock
+    for (let i = 0; i <= blockIterations; i++) {
+      const startBlock = startReviewBlock + BLOCK_LIMIT * i
+      endBlock = startBlock + BLOCK_LIMIT
+      if (endBlock >= latestBlockNumber) {
+        endBlock = 'latest'
+      }
+      const pastReviewEvents = await smartContract.getPastEvents(
+        'SubmittedReview',
+        {},
+        { fromBlock: startBlock, toBlock: endBlock },
+      )
+      pastReviewEvents.forEach(ev => pastEvents.push(ev))
+    }
 
-    await writeReviewsToDB(requestName, reviewRequest.reviews, tx)
-
+    const updatedBlockNumber =
+      endBlock == 'latest' ? latestBlockNumber : endBlock
     await mintedBlockRef
       .doc(lastBlockDoc.id)
-      .update({ lastRequestName: requestName })
-    await mintedBlockRef
-      .doc(lastBlockDoc.id)
-      .update({ lastSuccessTime: new Date() })
-    await mintedBlockRef
-      .doc(lastBlockDoc.id)
-      .update({ blockNumber: lastReviewBlock })
+      .update({ blockNumber: updatedBlockNumber })
+
+    pastEvents.sort((a, b) => {
+      return a.blockNumber - b.blockNumber
+    })
+
+    for (let i = 0; i < pastEvents.length; i++) {
+      const requestName = pastEvents[i].returnValues._requestName
+      const tx = pastEvents[i].transactionHash
+      const reviewRequest = await smartContract.methods
+        .getRequest(requestName)
+        .call()
+
+      await writeReviewsToDB(requestName, reviewRequest.reviews, tx)
+
+      await mintedBlockRef
+        .doc(lastBlockDoc.id)
+        .update({ lastRequestName: requestName })
+      await mintedBlockRef
+        .doc(lastBlockDoc.id)
+        .update({ lastSuccessTime: new Date() })
+    }
   }
 }
 
