@@ -4,12 +4,10 @@ const { db } = require('../firebase')
 const { saveForm, saveRequest, saveReviews } = require('./DeresyDBService')
 const web3 = require('../web3')
 const { MINTED_BLOCK_COLLECTION } = require('../constants/collections')
-const {
-  DERESY_CONTRACT_ABI,
-  DERESY_CONTRACT_ADDRESS,
-} = require('../constants/contractConstants')
+const { DERESY_CONTRACT_ABI } = require('../constants/contractConstants')
 
 const mintedBlockRef = db.collection(MINTED_BLOCK_COLLECTION)
+const CONTRACT_ADDRESS = functions.config().settings.contract_address
 
 const BLOCK_LIMIT = 100000
 
@@ -69,7 +67,7 @@ const processForms = async startFormBlock => {
   if (latestBlockNumber > startFormBlock) {
     const smartContract = new web3.eth.Contract(
       DERESY_CONTRACT_ABI,
-      DERESY_CONTRACT_ADDRESS,
+      CONTRACT_ADDRESS,
     )
     const snapshot = await mintedBlockRef
       .where('monitorType', '==', 'forms')
@@ -132,7 +130,7 @@ const processRequests = async startRequestBlock => {
   if (latestBlockNumber > startRequestBlock) {
     const smartContract = new web3.eth.Contract(
       DERESY_CONTRACT_ABI,
-      DERESY_CONTRACT_ADDRESS,
+      CONTRACT_ADDRESS,
     )
     const snapshot = await mintedBlockRef
       .where('monitorType', '==', 'requests')
@@ -199,7 +197,7 @@ const processReviews = async startReviewBlock => {
   if (latestBlockNumber > startReviewBlock) {
     const smartContract = new web3.eth.Contract(
       DERESY_CONTRACT_ABI,
-      DERESY_CONTRACT_ADDRESS,
+      CONTRACT_ADDRESS,
     )
     const snapshot = await mintedBlockRef
       .where('monitorType', '==', 'reviews')

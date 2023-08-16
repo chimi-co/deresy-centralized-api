@@ -1,6 +1,6 @@
 const Web3 = require('web3')
-const provider =
-  'https://arbitrum-mainnet.infura.io/v3/cab06d6a10fe4593b83f93a3101bd05b'
+const functions = require('firebase-functions')
+const provider = functions.config().settings.infura_provider
 const web3 = new Web3(provider)
 
 module.exports = web3

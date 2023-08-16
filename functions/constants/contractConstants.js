@@ -300,6 +300,4 @@ module.exports = {
       type: 'function',
     },
   ],
-
-  DERESY_CONTRACT_ADDRESS: '0x50e9a780bde93ccfa592ce9e981d5dbaf9cfc107',
 }
