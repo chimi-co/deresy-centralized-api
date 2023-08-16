@@ -1,8 +1,19 @@
 const functions = require('firebase-functions')
+const { groupBy } = require('lodash')
 
 const { db } = require('../firebase')
-const { saveForm, saveRequest, saveReviews } = require('./DeresyDBService')
 const web3 = require('../web3')
+
+const {
+  getGrantByTarget,
+  getReviewRequest,
+  getReviews,
+  saveForm,
+  saveRequest,
+  saveReviews,
+  updateGrant,
+} = require('./DeresyDBService')
+
 const { MINTED_BLOCK_COLLECTION } = require('../constants/collections')
 const { DERESY_CONTRACT_ABI } = require('../constants/contractConstants')
 
@@ -10,6 +21,40 @@ const mintedBlockRef = db.collection(MINTED_BLOCK_COLLECTION)
 const CONTRACT_ADDRESS = functions.config().settings.contract_address
 
 const BLOCK_LIMIT = 100000
+
+const getGrantScore = reviewsByGrant => {
+  const scores = []
+
+  reviewsByGrant.forEach(review => {
+    const answer1Score = Number(review.answers[10])
+    const answer2Score = Number(review.answers[11])
+    scores.push((answer1Score + answer2Score) / 2)
+  })
+
+  const res = scores.reduce((x, y) => {
+    return x + y
+  }, 0)
+
+  return res / scores.length
+}
+
+const updateGrantsScore = async requestName => {
+  const { reviews } = await getReviews(requestName)
+
+  const request = await getReviewRequest(requestName)
+  const { targets } = request
+
+  const reviewsByTarget = groupBy(reviews, 'targetIndex')
+  const targetIndexes = Object.keys(reviewsByTarget)
+
+  for (const index of targetIndexes) {
+    const score = getGrantScore(reviewsByTarget[index])
+    const grant = await getGrantByTarget(targets[index])
+    await updateGrant(grant.documentId, { score })
+  }
+
+  functions.logger.log('Grants scores was updated')
+}
 
 const writeFormToDB = async (formID, tx, reviewForm) => {
   const choicesObj = reviewForm[2].map(choices => {
@@ -60,6 +105,7 @@ const writeReviewsToDB = async (requestName, reviews) => {
   }
 
   await saveReviews(requestName, data)
+  await updateGrantsScore(requestName)
 }
 
 const processForms = async startFormBlock => {
