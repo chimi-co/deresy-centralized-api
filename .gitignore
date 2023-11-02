@@ -70,3 +70,5 @@ node_modules/
 .vscode
 
 functions/.env*
+
+deresy-prod.json
